@@ -1,0 +1,71 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Represents a user in the system (Pengusul, Verifikator, or Bapperida)",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "description": "Firebase Auth UID" },
+        "name": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "role": { "type": "string", "enum": ["pengusul", "verifikator", "bapperida"] },
+        "instansi": { "type": "string", "description": "Required for pengusul" },
+        "asalDaerah": { "type": "string", "description": "Required for pengusul" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "name", "email", "role", "createdAt"]
+    },
+    "VerifikatorInvite": {
+      "title": "Verifikator Invite",
+      "description": "Emails allowed to register as verifikator",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string", "format": "email" },
+        "addedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["email", "addedBy", "createdAt"]
+    },
+    "Proposal": {
+      "title": "Proposal",
+      "description": "Usulan pembangunan",
+      "type": "object",
+      "properties": {
+        "pengusulId": { "type": "string" },
+        "pengusulName": { "type": "string" },
+        "instansi": { "type": "string" },
+        "judul": { "type": "string" },
+        "deskripsi": { "type": "string" },
+        "status": { "type": "string", "enum": ["Menunggu Review", "Ditolak", "Diterima", "Validasi Final"] },
+        "tanggalPengajuan": { "type": "string", "format": "date-time" },
+        "skor": {
+          "type": "object",
+          "properties": {
+            "kelengkapan": { "type": "number" },
+            "kesesuaian": { "type": "number" },
+            "keselarasan": { "type": "number" },
+            "total": { "type": "number" }
+          }
+        },
+        "catatanVerifikasi": { "type": "string" },
+        "verifikatorId": { "type": "string" },
+        "bapperidaId": { "type": "string" }
+      },
+      "required": ["pengusulId", "pengusulName", "instansi", "judul", "deskripsi", "status", "tanggalPengajuan"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Stores user profiles and roles"
+    },
+    "/verifikator_invites/{inviteId}": {
+      "schema": { "$ref": "#/entities/VerifikatorInvite" },
+      "description": "Stores emails pre-approved to be verifikator"
+    },
+    "/proposals/{proposalId}": {
+      "schema": { "$ref": "#/entities/Proposal" },
+      "description": "Stores proposals submitted by pengusul"
+    }
+  }
+}

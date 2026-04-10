@@ -1,0 +1,105 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isBapperida() {
+      return isAuthenticated() && (
+        request.auth.token.email == 'retri.nastiti@gmail.com' || 
+        getUserData().role == 'bapperida'
+      );
+    }
+    
+    function isVerifikator() {
+      return isAuthenticated() && getUserData().role == 'verifikator';
+    }
+    
+    function isPengusul() {
+      return isAuthenticated() && getUserData().role == 'pengusul';
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+    function isValidUser(data) {
+      let requiredFields = ['uid', 'name', 'email', 'role', 'createdAt'];
+      return data.keys().hasAll(requiredFields) &&
+             data.uid is string && data.name is string && data.email is string &&
+             data.role in ['pengusul', 'verifikator', 'bapperida'] &&
+             data.createdAt is string &&
+             (!('instansi' in data) || data.instansi is string) &&
+             (!('asalDaerah' in data) || data.asalDaerah is string) &&
+             (!('validUntil' in data) || data.validUntil is string || data.validUntil == null);
+    }
+
+    function isValidProposal(data) {
+      let requiredFields = ['pengusulId', 'pengusulName', 'instansi', 'judul', 'deskripsi', 'kategori', 'paguAnggaran', 'linkLokasi', 'status', 'tanggalPengajuan', 'asalDaerah'];
+      return data.keys().hasAll(requiredFields) &&
+             data.pengusulId is string && data.pengusulName is string && data.instansi is string &&
+             data.judul is string && data.judul.size() > 0 && data.judul.size() < 500 &&
+             data.deskripsi is string && data.deskripsi.size() > 0 && data.deskripsi.size() < 10000 &&
+             data.kategori is string && data.paguAnggaran is number && data.linkLokasi is string &&
+             data.asalDaerah is string &&
+             (!('kakUrl' in data) || data.kakUrl is string) &&
+             (!('rabUrl' in data) || data.rabUrl is string) &&
+             data.status in ['Menunggu Review', 'Ditolak', 'Diterima', 'Validasi Final'] &&
+             data.tanggalPengajuan is string;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+    
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser(request.resource.data) && (
+          request.resource.data.role == 'pengusul' ||
+          (request.resource.data.role == 'bapperida' && request.auth.token.email == 'retri.nastiti@gmail.com')
+        )) ||
+        (isBapperida() && isValidUser(request.resource.data) && request.resource.data.role == 'verifikator')
+      );
+      allow update: if isAuthenticated() && (
+        (isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role) ||
+        (isBapperida() && resource.data.role == 'verifikator' && isValidUser(request.resource.data))
+      );
+      allow delete: if isBapperida() && resource.data.role == 'verifikator';
+    }
+
+    match /proposals/{proposalId} {
+      allow read: if isAuthenticated() && (
+        isBapperida() || isVerifikator() || (isPengusul() && resource.data.pengusulId == request.auth.uid)
+      );
+      
+      allow create: if isPengusul() && 
+                    isValidProposal(request.resource.data) && 
+                    request.resource.data.pengusulId == request.auth.uid &&
+                    request.resource.data.status == 'Menunggu Review';
+                    
+      allow update: if isAuthenticated() && (
+        (isVerifikator() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'skor', 'catatanVerifikasi', 'verifikatorId']) &&
+         request.resource.data.status in ['Diterima', 'Ditolak']
+        ) ||
+        (isBapperida() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'bapperidaId']) &&
+         request.resource.data.status == 'Validasi Final'
+        )
+      );
+    }
+  }
+}
